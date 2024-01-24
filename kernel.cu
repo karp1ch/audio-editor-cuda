@@ -1,4 +1,5 @@
-﻿#include <iostream>
+
+#include <iostream>
 #include <fstream>
 #include <vector>
 #include <cuda_runtime.h>
@@ -27,9 +28,9 @@ __global__ void removeNoise(char* data, int dataSize, float threshold, int start
     }
     else {
         if (abs(data[idx]) < threshold) {
-            float amplitude = static_cast<float>(data[idx]) / 128.0f;
+            float amplitude = static_cast<float>(data[idx]) / 32768.0f;
             amplitude *= noiseReductionFactor;
-            data[idx] = static_cast<char>(amplitude * 128.0f);
+            data[idx] = static_cast<char>(amplitude * 32768.0f);
         }
     }
 }
@@ -65,22 +66,22 @@ __global__ void increaseVolume(char* data, int dataSize, float gainDb) {
     const float gainLinear = powf(10.0, gainDb / 20.0);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < dataSize) {
-        float sample = static_cast<float>(data[idx]) / 128.0f;
+        float sample = static_cast<float>(data[idx]) / 32768.0f;
         sample *= gainLinear;
 
         if (sample > 1.0f) sample = 1.0f;
         if (sample < -1.0f) sample = -1.0f;
 
-        data[idx] = static_cast<char>(sample * 128.0f); 
+        data[idx] = static_cast<char>(sample * 32768.0f);
     }
 }
 
 __global__ void normalizeAudio(char* data, int dataSize, float targetLevel, float threshold) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < dataSize && data[idx] > threshold) {
-        float sample = static_cast<float>(data[idx]) / 128.0f;
+    if (idx < dataSize) {
+        float sample = static_cast<float>(data[idx]) / 32768.0f;
         sample *= targetLevel;
-        data[idx] = static_cast<char>(sample * 128.0f);
+        data[idx] = static_cast<char>(sample * 32768.0f);
     }
 }
 
@@ -88,10 +89,10 @@ __global__ void addReverb(char* data, int dataSize, int delaySamples, float deca
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int delayedIdx = idx - delaySamples;
     if (idx < dataSize && delayedIdx >= 0) {
-        float delayedSample = static_cast<float>(data[delayedIdx]) / 128.0f;
-        float currentSample = static_cast<float>(data[idx]) / 128.0f;
+        float delayedSample = static_cast<float>(data[delayedIdx]) / 32768.0f;
+        float currentSample = static_cast<float>(data[idx]) / 32768.0f;
         float reverbSample = currentSample + delayedSample * decay;
-        data[idx] = static_cast<char>(reverbSample * 128.0f);
+        data[idx] = static_cast<char>(reverbSample * 32768.0f);
     }
 }
 
@@ -99,9 +100,9 @@ __global__ void fadeIn(char* data, int dataSize, int fadeLength) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < fadeLength) {
         float fadeFactor = static_cast<float>(idx) / fadeLength;
-        float sample = static_cast<float>(data[idx]) / 128.0f;
+        float sample = static_cast<float>(data[idx]) / 32768.0f;
         sample *= fadeFactor;
-        data[idx] = static_cast<char>(sample * 128.0f);
+        data[idx] = static_cast<char>(sample * 32768.0f);
     }
 }
 
@@ -110,9 +111,9 @@ __global__ void fadeOut(char* data, int dataSize, int fadeLength) {
     int fadeStartIdx = dataSize - fadeLength;
     if (idx >= fadeStartIdx && idx < dataSize) {
         float fadeFactor = static_cast<float>(dataSize - idx) / fadeLength;
-        float sample = static_cast<float>(data[idx]) / 128.0f;
+        float sample = static_cast<float>(data[idx]) / 32768.0f;
         sample *= fadeFactor;
-        data[idx] = static_cast<char>(sample * 128.0f);
+        data[idx] = static_cast<char>(sample * 32768.0f);
     }
 }
 
@@ -138,9 +139,9 @@ int main() {
     std::cout << "Sample Rate: " << header.sampleRate << std::endl;
     std::cout << "Bits Per Sample: " << header.bitsPerSample << std::endl;
 
-    
+
     // is supported
-    if (header.audioFormat != 1 || (header.bitsPerSample != 16 && header.bitsPerSample != 32)) {
+    if (header.audioFormat != 1 || header.bitsPerSample != 16) {
         std::cerr << "Unsupported audio format or bits per sample." << std::endl;
         return 1;
     }
@@ -150,8 +151,8 @@ int main() {
 
     std::cout << "Audio Duration: " << audioDuration << " seconds" << std::endl;
 
-    // Noise sample
-    float startSeconds, endSeconds, gainDb, noiseThreshold, targetLevel, decay;
+    // enter parametrs
+    float startSeconds, endSeconds, gainDb, noiseThreshold, decay, fade;
     std::cout << "Enter start time in seconds (Noise sample): ";
     std::cin >> startSeconds;
     std::cout << "Enter end time in seconds (Noise sample): ";
@@ -160,9 +161,12 @@ int main() {
     std::cin >> gainDb;
     std::cout << "Enter reverb coeff: ";
     std::cin >> decay;
-    targetLevel = 0.9f;
+    std::cout << "Enter fade length: ";
+    std::cin >> fade;
+    const float targetLevel = 0.85f;
 
-    
+
+
     // reading data
     std::vector<char> dataBuffer(header.dataSize);
     inputFile.read(dataBuffer.data(), header.dataSize);
@@ -185,12 +189,13 @@ int main() {
     // convert sample2time
     int startSample = static_cast<int>(startSeconds * header.sampleRate * header.numChannels * header.numChannels);
     int endSample = static_cast<int>(endSeconds * header.sampleRate * header.numChannels * header.numChannels);
-    int fadeLength = static_cast<int>(2.0f * header.sampleRate);
+    int fadeLength = static_cast<int>(fade * header.sampleRate * header.numChannels * header.numChannels);
     int delaySamples = static_cast<int>(0.5f * header.sampleRate);
 
+    // kernels
     calculateNoiseThresholdKernel << <gridSize, blockSize >> > (d_data, header.dataSize, header.sampleRate, d_result, startSample, endSample, header.numChannels);
     cudaMemcpy(&noiseThreshold, d_result, sizeof(float), cudaMemcpyDeviceToHost);
-    
+
     // Calculate mean over the samples
     int numSamples = endSample - startSample;
     noiseThreshold /= (numSamples * header.numChannels * header.numChannels * header.bitsPerSample);
@@ -207,12 +212,11 @@ int main() {
     normalizeAudio << <gridSize, blockSize >> > (d_data, header.dataSize, targetLevel, noiseThreshold);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
-  
+
     addReverb << <gridSize, blockSize >> > (d_data, header.dataSize, delaySamples, decay);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
 
-    
     fadeIn << <gridSize, blockSize >> > (d_data, header.dataSize, fadeLength);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
     fadeOut << <gridSize, blockSize >> > (d_data, header.dataSize, fadeLength);
