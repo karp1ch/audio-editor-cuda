@@ -118,7 +118,38 @@ __global__ void fadeOut(char* data, int dataSize, int fadeLength) {
 }
 
 
+//
+//__global__ void increaseVolume(char* data, int dataSize, float factor) {
+//    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//    if (idx < dataSize) {
+//        data[idx] *= factor;
+//    }
+//}
+//
+//__global__ void decreaseVolume(char* data, int dataSize, float factor) {
+//    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+//    if (idx < dataSize) {
+//        data[idx] /= factor;
+//    }
+//}
 
+
+
+
+__global__ void changeSpeed(char* data, int dataSize, float speedFactor) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (idx < dataSize) {
+        float originalIndex = static_cast<float>(idx);
+        float newIndex = originalIndex * speedFactor;
+        int lowerIndex = static_cast<int>(floor(newIndex));
+        int upperIndex = static_cast<int>(ceil(newIndex));
+
+        // Interpolation
+        float fraction = newIndex - lowerIndex;
+        data[idx] = static_cast<char>((1.0f - fraction) * data[lowerIndex] + fraction * data[upperIndex]);
+    }
+}
 
 
 int main() {
@@ -165,6 +196,17 @@ int main() {
     std::cin >> fade;
     const float targetLevel = 0.85f;
 
+    /* char volum;
+     float idFactor;
+     std::cout << "Increase or decrease volume (i/d): ";
+     std::cin >> volum;
+     std::cout << "Enter factor: ";
+     std::cin >> idFactor;*/
+
+
+    float speedFactor;
+    std::cout << "Change speed - Enter factor <0.99, 1.75>" << std::endl;
+    std::cin >> speedFactor;
 
 
     // reading data
@@ -223,6 +265,24 @@ int main() {
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
 
+
+    //switch (volum) {
+    //case 'i':
+    //    // increase volume
+    //    increaseVolume << <gridSize, blockSize >> > (d_data, header.dataSize, idFactor);
+    //    break;
+
+    //case 'd':
+    //    // decrease volume
+    //    decreaseVolume << <gridSize, blockSize >> > (d_data, header.dataSize, idFactor);
+    //    break;
+    //default:
+    //    std::cout << "Wrong input" << std::endl;
+    //}
+
+    changeSpeed << <gridSize, blockSize >> > (d_data, header.dataSize, speedFactor);
+    cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
+
     // CUDA free
     cudaFree(d_result);
     cudaFree(d_data);
@@ -242,4 +302,3 @@ int main() {
 
     return 0;
 }
-
