@@ -1,4 +1,5 @@
-# Audio Processor CUDA
+# Program do Przetwarzania Dźwięku CUDA
+
 
 ## Opis
 Ten projekt jest aplikacją do przetwarzania dźwięku wykorzystującą CUDA. 
@@ -27,9 +28,12 @@ Umożliwia ona wykonanie różnych operacji na plikach dźwiękowych WAV 16-bito
 
 ## Interfejs
 ![image](https://github.com/karp1ch/audio-editor-cuda/assets/106777205/9de8c4c4-e89e-4bc9-8a1a-3bc34588c65e)
-`Interfejs naszego programu: przykładowe wprowadzenie parametrów`
+
+*Interfejs naszego programu: przykładowe wprowadzenie parametrów*
+
 ![image](https://github.com/karp1ch/audio-editor-cuda/assets/106777205/94528d4b-21c3-4eb5-bff8-117dfe711e5d)
-`Interfejs Audacity: widać że plik podległ modyfikacji`
+
+*Interfejs Audacity: widać że plik podległ modyfikacji*
 
 
 ## Uwagi
