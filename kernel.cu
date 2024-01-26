@@ -136,20 +136,21 @@ __global__ void fadeOut(char* data, int dataSize, int fadeLength) {
 
 
 
-__global__ void changeSpeed(char* data, int dataSize, float speedFactor) {
+
+__global__ void changeSpeed(char* data, int dataSize, float speedFactor, int sampleRate) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < dataSize) {
-        float originalIndex = static_cast<float>(idx);
-        float newIndex = originalIndex * speedFactor;
-        int lowerIndex = static_cast<int>(floor(newIndex));
-        int upperIndex = static_cast<int>(ceil(newIndex));
+        float oldIdx = static_cast<float>(idx) * speedFactor;
+        int roundIdx = static_cast<int>(round(oldIdx));
 
-        // Interpolation
-        float fraction = newIndex - lowerIndex;
-        data[idx] = static_cast<char>((1.0f - fraction) * data[lowerIndex] + fraction * data[upperIndex]);
+        float sample = static_cast<float>(data[roundIdx]) / 32768.0f;
+
+        data[idx] = static_cast<char>(sample * 32768.0f);
     }
 }
+
+
 
 
 int main() {
@@ -228,6 +229,12 @@ int main() {
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, removeNoise, 0, header.dataSize);
     gridSize = (header.dataSize + blockSize - 1) / blockSize;
 
+
+    //speed kernel
+    changeSpeed << <gridSize, blockSize >> > (d_data, header.dataSize, speedFactor, cudaMemcpyDeviceToHost);
+    cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
+
+
     // convert sample2time
     int startSample = static_cast<int>(startSeconds * header.sampleRate * header.numChannels * header.numChannels);
     int endSample = static_cast<int>(endSeconds * header.sampleRate * header.numChannels * header.numChannels);
@@ -280,8 +287,6 @@ int main() {
     //    std::cout << "Wrong input" << std::endl;
     //}
 
-    changeSpeed << <gridSize, blockSize >> > (d_data, header.dataSize, speedFactor);
-    cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
     // CUDA free
     cudaFree(d_result);
