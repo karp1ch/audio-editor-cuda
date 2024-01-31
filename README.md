@@ -13,15 +13,15 @@ Umożliwia ona wykonanie różnych operacji na plikach dźwiękowych WAV 16-bito
 ## Funkcje
 1.`calculateNoiseThresholdKernel`: Oblicza próg szumu (średnia głośność na zadanym przedziale).
 2. `removeNoise`: Usuwa szumy z dźwięku (na zadanym przedziale zeruje, lub jeśli dzwięk ciszej od thresholda, to zmniejsza).
-4. `increaseVolume`: Zwiększa głośność dźwięku.
-5. `normalizeAudio`: Normalizuje dźwięk do określonego poziomu.
-6. `addReverb`: Dodaje efekt pogłosu.
-7. `fadeIn`: Stopniowe zwiększanie głośności (fade in).
-8. `fadeOut`: Stopniowe zmniejszanie głośności (fade out).
-9. `changeSpeed`: Zwiększa prędkość odtwarzania dźwięku.
+3. `increaseVolume`: Zwiększa głośność dźwięku.
+4. `normalizeAudio`: Normalizuje dźwięk do określonego poziomu.
+5. `addReverb`: Dodaje efekt pogłosu.
+6. `fadeIn`: Stopniowe zwiększanie głośności (fade in).
+7. `fadeOut`: Stopniowe zmniejszanie głośności (fade out).
+8. `changeSpeed`: Zwiększa prędkość odtwarzania dźwięku.
 
 ## Instrukcja Użycia
-1. Umieść plik dzwiękowy formatu WAV (16 bit) w folderze z programem pod nazwą.
+1. Umieść plik dzwiękowy formatu WAV (16 bit) w folderze z programem pod nazwą `input.wav`.
 2. Skompiluj program.
 3. Uruchom program i postępuj zgodnie z instrukcjami w celu wprowadzenia parametrów obróbki dźwięku.
 4. Program przetworzy plik `input.wav` i zapisze wynik w pliku `output.wav`.
