@@ -29,6 +29,7 @@ Umożliwia ona wykonanie różnych operacji na plikach dźwiękowych WAV 16-bito
 
 ## Interfejs
 ![image](https://github.com/karp1ch/audio-editor-cuda/assets/106777205/9de8c4c4-e89e-4bc9-8a1a-3bc34588c65e)
+![obraz](https://github.com/karp1ch/audio-editor-cuda/assets/157658045/3f72f552-df27-407d-bfcd-4cebe5a1b98a)
 
 *Interfejs naszego programu: przykładowe wprowadzenie parametrów*
 
