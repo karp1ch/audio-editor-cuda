@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -117,44 +116,37 @@ __global__ void fadeOut(char* data, int dataSize, int fadeLength) {
     }
 }
 
-
-//
-//__global__ void increaseVolume(char* data, int dataSize, float factor) {
-//    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//    if (idx < dataSize) {
-//        data[idx] *= factor;
-//    }
-//}
-//
-//__global__ void decreaseVolume(char* data, int dataSize, float factor) {
-//    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-//    if (idx < dataSize) {
-//        data[idx] /= factor;
-//    }
-//}
-
-
-
-
-
-__global__ void changeSpeed(char* data, int dataSize, float speedFactor, int sampleRate) {
+__global__ void changeSpeed(const char* in_data, char* out_data, int in_dataSize, float speedFactor, uint16_t numChannels) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int outIdx = idx * numChannels;
 
-    if (idx < dataSize) {
-        float oldIdx = static_cast<float>(idx) * speedFactor;
-        int roundIdx = static_cast<int>(round(oldIdx));
+    if (outIdx < in_dataSize) {
+        float srcIdx = idx * speedFactor;
+        int srcIdxInt = static_cast<int>(srcIdx) * numChannels;
+        int srcIdxNext = min(srcIdxInt + numChannels, in_dataSize - numChannels);
+        float frac = srcIdx - static_cast<int>(srcIdx);
 
-        float sample = static_cast<float>(data[roundIdx]) / 32768.0f;
+        for (int channel = 0; channel < numChannels; ++channel) {
+            if (srcIdxInt + channel < in_dataSize && srcIdxNext + channel < in_dataSize) {
+                short sample1 = static_cast<short>((in_data[srcIdxInt + channel] << 8) | (in_data[srcIdxInt + channel + 1] & 0xFF));
+                short sample2 = static_cast<short>((in_data[srcIdxNext + channel] << 8) | (in_data[srcIdxNext + channel + 1] & 0xFF));
 
-        data[idx] = static_cast<char>(sample * 32768.0f);
+                float interpSample = (1.0f - frac) * sample1 + frac * sample2;
+                interpSample = max(min(interpSample, 32767.0f), -32768.0f);
+
+                out_data[outIdx + channel] = static_cast<char>((static_cast<short>(interpSample) >> 8) & 0xFF);
+                out_data[outIdx + channel + 1] = static_cast<char>(static_cast<short>(interpSample) & 0xFF);
+            }
+        }
     }
 }
 
 
 
 
+
 int main() {
-    const char* inputFileName = "test.wav";
+    const char* inputFileName = "input.wav";
     const char* outputFileName = "output.wav";
 
     // open
@@ -184,7 +176,8 @@ int main() {
     std::cout << "Audio Duration: " << audioDuration << " seconds" << std::endl;
 
     // enter parametrs
-    float startSeconds, endSeconds, gainDb, noiseThreshold, decay, fade;
+    const float targetLevel = 0.85f;
+    float startSeconds, endSeconds, gainDb, noiseThreshold, decay, fade, speedFactor;;
     std::cout << "Enter start time in seconds (Noise sample): ";
     std::cin >> startSeconds;
     std::cout << "Enter end time in seconds (Noise sample): ";
@@ -195,21 +188,11 @@ int main() {
     std::cin >> decay;
     std::cout << "Enter fade length: ";
     std::cin >> fade;
-    const float targetLevel = 0.85f;
-
-    /* char volum;
-     float idFactor;
-     std::cout << "Increase or decrease volume (i/d): ";
-     std::cin >> volum;
-     std::cout << "Enter factor: ";
-     std::cin >> idFactor;*/
-
-
-    float speedFactor;
-    std::cout << "Change speed - Enter factor <0.99, 1.75>" << std::endl;
+    std::cout << "Change speed" << std::endl;
     std::cin >> speedFactor;
-
-
+    int new_dataSize = static_cast<int>(header.dataSize / speedFactor);
+    
+    
     // reading data
     std::vector<char> dataBuffer(header.dataSize);
     inputFile.read(dataBuffer.data(), header.dataSize);
@@ -218,22 +201,18 @@ int main() {
     float* d_result;
     cudaMalloc((void**)&d_result, sizeof(float));
 
-    // CUDA copy
     char* d_data;
     cudaMalloc((void**)&d_data, header.dataSize);
     cudaMemcpy(d_data, dataBuffer.data(), header.dataSize, cudaMemcpyHostToDevice);
+
+    char* d_newData;
+    cudaMalloc((void**)&d_newData, new_dataSize);
 
     // CUDA grid
     int blockSize;
     int minGridSize, gridSize;
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, removeNoise, 0, header.dataSize);
     gridSize = (header.dataSize + blockSize - 1) / blockSize;
-
-
-    //speed kernel
-    changeSpeed << <gridSize, blockSize >> > (d_data, header.dataSize, speedFactor, cudaMemcpyDeviceToHost);
-    cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
-
 
     // convert sample2time
     int startSample = static_cast<int>(startSeconds * header.sampleRate * header.numChannels * header.numChannels);
@@ -265,32 +244,23 @@ int main() {
     addReverb << <gridSize, blockSize >> > (d_data, header.dataSize, delaySamples, decay);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
-
     fadeIn << <gridSize, blockSize >> > (d_data, header.dataSize, fadeLength);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
     fadeOut << <gridSize, blockSize >> > (d_data, header.dataSize, fadeLength);
     cudaMemcpy(dataBuffer.data(), d_data, header.dataSize, cudaMemcpyDeviceToHost);
 
-
-
-    //switch (volum) {
-    //case 'i':
-    //    // increase volume
-    //    increaseVolume << <gridSize, blockSize >> > (d_data, header.dataSize, idFactor);
-    //    break;
-
-    //case 'd':
-    //    // decrease volume
-    //    decreaseVolume << <gridSize, blockSize >> > (d_data, header.dataSize, idFactor);
-    //    break;
-    //default:
-    //    std::cout << "Wrong input" << std::endl;
-    //}
+    gridSize = (new_dataSize + blockSize - 1) / blockSize;
+    changeSpeed << <gridSize, blockSize >> > (d_data, d_newData, header.dataSize, speedFactor, header.numChannels);
+    header.dataSize = new_dataSize;
+    std::vector<char> newDataBuffer(new_dataSize);
+    cudaMemcpy(newDataBuffer.data(), d_newData, new_dataSize, cudaMemcpyDeviceToHost);
 
 
     // CUDA free
     cudaFree(d_result);
     cudaFree(d_data);
+    cudaFree(d_newData);
+
 
     // save output
     std::ofstream outputFile(outputFileName, std::ios::binary);
@@ -300,8 +270,7 @@ int main() {
     }
 
     outputFile.write(reinterpret_cast<const char*>(&header), sizeof(WavHeader));
-
-    outputFile.write(dataBuffer.data(), header.dataSize);
+    outputFile.write(newDataBuffer.data(), new_dataSize);
 
     std::cout << "File processing completed successfully." << std::endl;
 
